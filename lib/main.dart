@@ -34,7 +34,7 @@ class QuizApp extends StatelessWidget {
   }
 }
 
-// --- トップ画面：級の選択 ---
+//トップ画面
 class TopPage extends StatefulWidget {
   const TopPage({super.key});
 
@@ -48,12 +48,11 @@ class _TopPageState extends State<TopPage> {
   @override
   void initState() {
     super.initState();
-    _playStartSound(); // 画面が開いた瞬間に再生
+    _playStartSound();
   }
 
   void _playStartSound() async {
     try {
-      // assets/sounds/top_sound.mp3 を再生
       await _bgmPlayer.play(AssetSource('sounds/top_sound.mp3'));
     } catch (e) {
       debugPrint("BGM再生エラー: $e");
@@ -62,7 +61,7 @@ class _TopPageState extends State<TopPage> {
 
   @override
   void dispose() {
-    _bgmPlayer.dispose(); // 画面を閉じるときにメモリを解放
+    _bgmPlayer.dispose();
     super.dispose();
   }
 
@@ -126,7 +125,7 @@ class _TopPageState extends State<TopPage> {
             textStyle: const TextStyle(fontSize: 20),
           ),
           onPressed: () {
-            _bgmPlayer.stop(); // 画面遷移時に音を止める
+            _bgmPlayer.stop();
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -141,7 +140,7 @@ class _TopPageState extends State<TopPage> {
   }
 }
 
-//セット選択画面：級に応じてボタンを動的に増やす
+//セット選択画面
 class LevelSelectionPage extends StatefulWidget {
   final String level;
   const LevelSelectionPage({super.key, required this.level});
@@ -195,10 +194,8 @@ class _LevelSelectionPageState extends State<LevelSelectionPage> {
         var row = listData[i];
         if (row.length < 10) continue;
 
-        String rowLevel = row[1].toString().trim();
-        String rowSet = row[2].toString().trim();
-
-        if (rowLevel == widget.level && rowSet == setNumber) {
+        if (row[1].toString().trim() == widget.level &&
+            row[2].toString().trim() == setNumber) {
           questions.add({
             'id': row[0].toString().trim(),
             'q': row[3].toString(),
@@ -229,35 +226,107 @@ class _LevelSelectionPageState extends State<LevelSelectionPage> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _loadWrongQuestions() async {
+    try {
+      final rawData = await rootBundle.loadString('assets/data/quiz_data.csv');
+      List<List<dynamic>> listData = const CsvToListConverter().convert(
+        rawData,
+      );
+      List<Map<String, dynamic>> wrongQuestions = [];
+      for (var i = 1; i < listData.length; i++) {
+        var row = listData[i];
+        if (row.length < 10) continue;
+        String id = row[0].toString().trim();
+        if (row[1].toString().trim() == widget.level) {
+          int count = await WrongQuestionManager.getCount(id);
+          if (count > 0) {
+            wrongQuestions.add({
+              'id': id,
+              'q': row[3].toString(),
+              'choices': [
+                row[4].toString(),
+                row[5].toString(),
+                row[6].toString(),
+                row[7].toString(),
+              ],
+              'answer': int.tryParse(row[8].toString().trim()) ?? 0,
+              'ext': row[9].toString(),
+            });
+          }
+        }
+      }
+      return wrongQuestions;
+    } catch (e) {
+      return [];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('${widget.level}級 セット選択')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
+          : ListView(
               padding: const EdgeInsets.all(20),
-              itemCount: _totalSets,
-              itemBuilder: (context, index) {
-                String setNum = (index + 1).toString();
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 10),
-                  child: ListTile(
-                    title: Text(
-                      '過去問セット $setNum (10問)',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+              children: [
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _loadWrongQuestions(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                      return Card(
+                        color: Colors.red[50],
+                        margin: const EdgeInsets.only(bottom: 20),
+                        child: ListTile(
+                          leading: const Icon(Icons.warning, color: Colors.red),
+                          title: Text(
+                            '【苦手克服】間違えた問題 (${snapshot.data!.length}問)',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                            ),
+                          ),
+                          subtitle: const Text('一度間違えた問題に再挑戦'),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => QuizPage(
+                                  level: widget.level,
+                                  questions: snapshot.data!,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                const Text(
+                  '通常セット',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Divider(),
+                ...List.generate(_totalSets, (index) {
+                  String setNum = (index + 1).toString();
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    child: ListTile(
+                      title: Text('過去問セット $setNum (10問)'),
+                      trailing: const Icon(Icons.arrow_forward_ios),
+                      onTap: () => _loadAndStart(context, setNum),
                     ),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () => _loadAndStart(context, setNum),
-                  ),
-                );
-              },
+                  );
+                }),
+              ],
             ),
     );
   }
 }
 
-// --- クイズ画面 ---
+//クイズ画面
 class QuizPage extends StatefulWidget {
   final String level;
   final List<Map<String, dynamic>> questions;
@@ -270,19 +339,21 @@ class _QuizPageState extends State<QuizPage> {
   int _currentIndex = 0;
   int? _selectedAnswer;
   int _score = 0;
-
-  // 音を鳴らす
-  // 音を鳴らす装置の準備
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  // 音を鳴らす関数（シンプル版）
   void _playSound(bool isCorrect) async {
     try {
       String fileName = isCorrect ? 'correct.mp3' : 'incorrect.mp3';
       await _audioPlayer.play(AssetSource('sounds/$fileName'));
     } catch (e) {
-      // 再生エラー時のみログを出す（通常は不要）
+      debugPrint("再生エラー: $e");
     }
+  }
+
+  Future<void> _incrementWrongCount(String questionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    int currentCount = prefs.getInt('wrong_count_$questionId') ?? 0;
+    await prefs.setInt('wrong_count_$questionId', currentCount + 1);
   }
 
   void _next() {
@@ -320,8 +391,8 @@ class _QuizPageState extends State<QuizPage> {
           Center(
             child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(context); // Dialog
-                Navigator.pop(context); // QuizPage
+                Navigator.pop(context);
+                Navigator.pop(context);
               },
               child: const Text('セット選択に戻る'),
             ),
@@ -334,7 +405,7 @@ class _QuizPageState extends State<QuizPage> {
   @override
   Widget build(BuildContext context) {
     if (widget.questions.isEmpty) {
-      return Scaffold(body: const Center(child: Text('問題がありません')));
+      return const Scaffold(body: Center(child: Text('問題がありません')));
     }
 
     final q = widget.questions[_currentIndex];
@@ -389,9 +460,10 @@ class _QuizPageState extends State<QuizPage> {
                         setState(() {
                           _selectedAnswer = i;
                           bool correct = (i == q['answer']);
-
                           if (correct) {
                             _score++;
+                          } else {
+                            _incrementWrongCount(q['id']);
                           }
                           _playSound(correct);
                         });
@@ -421,5 +493,15 @@ class _QuizPageState extends State<QuizPage> {
         ),
       ),
     );
+  }
+}
+
+//データ管理クラス
+class WrongQuestionManager {
+  static const String _prefix = 'wrong_count_';
+
+  static Future<int> getCount(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('$_prefix$id') ?? 0;
   }
 }
