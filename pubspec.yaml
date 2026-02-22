@@ -35,6 +35,8 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   csv: ^6.0.0
+  audioplayers: ^5.2.1        # 音を鳴らすため
+  shared_preferences: ^2.2.2  # 学習履歴を保存するため
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +61,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/data/quiz_data.csv
+    - assets/images/
+    - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
