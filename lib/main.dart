@@ -314,7 +314,7 @@ class _LevelSelectionPageState extends State<LevelSelectionPage> {
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 10),
                     child: ListTile(
-                      title: Text('過去問セット $setNum (10問)'),
+                      title: Text('その$setNum (10問)'),
                       trailing: const Icon(Icons.arrow_forward_ios),
                       onTap: () => _loadAndStart(context, setNum),
                     ),
